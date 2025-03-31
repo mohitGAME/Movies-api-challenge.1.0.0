@@ -14,6 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddTransient<IShowtimesRepository, ShowtimesRepository>();
 builder.Services.AddTransient<ITicketsRepository, TicketsRepository>();
 builder.Services.AddTransient<IAuditoriumsRepository, AuditoriumsRepository>();
+builder.Services.AddTransient<IProvidedApiClient, ProvidedApiClient>();
 
 builder.Services.AddDbContext<CinemaContext>(options =>
 {
@@ -37,8 +38,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Add HTTP client
-builder.Services.AddHttpClient();
+// Add HTTP client and ProvidedApiClient
+builder.Services.AddHttpClient<IProvidedApiClient, ProvidedApiClient>();
 
 // Configure Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
@@ -48,6 +49,12 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     return ConnectionMultiplexer.Connect(redisConnectionString);
 });
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+
+// Configure GRPC
+if (builder.Configuration.GetValue<bool>("UseGrpc", false))
+{
+    builder.Services.AddGrpc();
+}
 
 // Configure logging
 builder.Logging.ClearProviders();

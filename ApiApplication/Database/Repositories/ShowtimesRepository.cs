@@ -19,39 +19,56 @@ namespace ApiApplication.Database.Repositories
             _context = context;
         }
 
+        public async Task<ShowtimeEntity> CreateShowtimeAsync(string movieId, int auditoriumId, DateTime startTime, MovieData movieData, CancellationToken cancel)
+        {
+            var auditorium = await _context.Auditoriums.FindAsync(auditoriumId);
+            if (auditorium == null)
+                throw new ArgumentException("Auditorium not found");
+
+            var showtime = new ShowtimeEntity
+            {
+                MovieId = movieId,
+                AuditoriumId = auditoriumId,
+                StartTime = startTime,
+                MovieTitle = movieData.Title,
+                // Add other movie data fields as needed
+            };
+
+            _context.Showtimes.Add(showtime);
+            await _context.SaveChangesAsync(cancel);
+
+            return showtime;
+        }
+
+        public async Task<IEnumerable<ShowtimeEntity>> GetAllAsync(Expression<Func<ShowtimeEntity, bool>> filter, CancellationToken cancel)
+        {
+            return await _context.Showtimes
+                .Include(x => x.Auditorium)
+                .Where(filter)
+                .ToListAsync(cancel);
+        }
+
         public async Task<ShowtimeEntity> GetWithMoviesByIdAsync(int id, CancellationToken cancel)
         {
             return await _context.Showtimes
-                .Include(x => x.Movie)
+                .Include(x => x.Auditorium)
                 .FirstOrDefaultAsync(x => x.Id == id, cancel);
         }
 
         public async Task<ShowtimeEntity> GetWithTicketsByIdAsync(int id, CancellationToken cancel)
         {
             return await _context.Showtimes
+                .Include(x => x.Auditorium)
                 .Include(x => x.Tickets)
+                    .ThenInclude(x => x.Seats)
                 .FirstOrDefaultAsync(x => x.Id == id, cancel);
         }
 
-        public async Task<IEnumerable<ShowtimeEntity>> GetAllAsync(Expression<Func<ShowtimeEntity, bool>> filter, CancellationToken cancel)
+        public async Task<ShowtimeEntity> GetShowtimeAsync(int id, CancellationToken cancel)
         {
-            if (filter == null)
-            {
-                return await _context.Showtimes
-                .Include(x => x.Movie)
-                .ToListAsync(cancel);
-            }
             return await _context.Showtimes
-                .Include(x => x.Movie)
-                .Where(filter)
-                .ToListAsync(cancel);
-        }
-
-        public async Task<ShowtimeEntity> CreateShowtime(ShowtimeEntity showtimeEntity, CancellationToken cancel)
-        {
-            var showtime = await _context.Showtimes.AddAsync(showtimeEntity, cancel);
-            await _context.SaveChangesAsync(cancel);
-            return showtime.Entity;
+                .Include(x => x.Auditorium)
+                .FirstOrDefaultAsync(x => x.Id == id, cancel);
         }
     }
 }
