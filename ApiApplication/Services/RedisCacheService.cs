@@ -73,4 +73,27 @@ public class RedisCacheService : ICacheService
             _logger.LogError(ex, "Error removing data from Redis cache for key {Key}", key);
         }
     }
+
+    /// <inheritdoc />
+    public async Task<T> GetOrSetAsync<T>(string key, Func<Task<T>> factory, TimeSpan? expirationTime = null)
+    {
+        try
+        {
+            var cachedValue = await GetAsync<T>(key);
+            if (cachedValue != null)
+            {
+                return cachedValue;
+            }
+
+            var newValue = await factory();
+            await SetAsync(key, newValue, expirationTime);
+            return newValue;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in GetOrSet operation for key {Key}", key);
+            // If cache operations fail, still try to get the value from the factory
+            return await factory();
+        }
+    }
 }
