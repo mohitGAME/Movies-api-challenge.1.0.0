@@ -117,7 +117,6 @@ namespace ApiApplication.Database.Repositories
         public async Task<ShowtimeEntity> CreateShowtime(ShowtimeEntity showtimeEntity, CancellationToken cancel)
         {
             var movie = await _context.Movies
-                .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.ImdbId == showtimeEntity.Movie.ImdbId, cancel);
 
             if (movie == null)
@@ -128,7 +127,7 @@ namespace ApiApplication.Database.Repositories
             else
             {
                 // Use the existing movie's Id
-                showtimeEntity.Movie.Id = movie.Id;
+                showtimeEntity.Movie = movie;
             }
 
             var showtime = await _context.Showtimes.AddAsync(showtimeEntity, cancel);

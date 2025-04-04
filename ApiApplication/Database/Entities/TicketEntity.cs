@@ -7,20 +7,9 @@ namespace ApiApplication.Database.Entities
     {
         public TicketEntity()
         {
-            CreatedTime = DateTime.Now;
+            CreatedTime = DateTime.UtcNow;
             Paid = false;
         }
-
-        //public Guid Id { get; set; }
-        //public int ShowtimeId { get; set; }
-        //public ICollection<SeatEntity> Seats { get; set; }
-        //public DateTime CreatedAt { get; set; }
-        //public DateTime ExpiresAt { get; set; }
-        //public bool Paid { get; set; }
-        //public bool IsExpired { get; set; }
-        //public ShowtimeEntity Showtime { get; set; }
-
-
         public Guid Id { get; set; }
         public int ShowtimeId { get; set; }
         public ICollection<SeatEntity> Seats { get; set; }

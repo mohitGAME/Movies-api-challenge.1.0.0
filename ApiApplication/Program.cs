@@ -19,7 +19,8 @@ builder.Services.AddDbContext<CinemaContext>(options =>
 {
     options.UseSqlite("Data Source=cinema.db")
         .EnableSensitiveDataLogging()
-        .ConfigureWarnings(b => b.Ignore(SqliteEventId.UniqueConstraintFound));
+        .ConfigureWarnings(b => b.Ignore(SqliteEventId.UniqueConstraintFound))
+        .LogTo(Console.WriteLine, LogLevel.Information);
 });
 
 

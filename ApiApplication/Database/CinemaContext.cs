@@ -9,11 +9,11 @@ namespace ApiApplication.Database
         {
             
         }
-
         public DbSet<AuditoriumEntity> Auditoriums { get; set; }
         public DbSet<ShowtimeEntity> Showtimes { get; set; }
         public DbSet<MovieEntity> Movies { get; set; }
         public DbSet<TicketEntity> Tickets { get; set; }
+        public DbSet<SeatEntity> Seats { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -27,7 +27,13 @@ namespace ApiApplication.Database
             modelBuilder.Entity<SeatEntity>(build =>
             {
                 build.HasKey(entry => new { entry.AuditoriumId, entry.Row, entry.SeatNumber });
-                build.HasOne(entry => entry.Auditorium).WithMany(entry => entry.Seats).HasForeignKey(entry => entry.AuditoriumId);
+                build.HasOne(entry => entry.Auditorium)
+                    .WithMany(entry => entry.Seats)
+                    .HasForeignKey(entry => entry.AuditoriumId);
+                build.HasOne(s => s.Ticket)
+                    .WithMany(t => t.Seats)
+                    .HasForeignKey(s => s.TicketEntityId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<ShowtimeEntity>(build =>
@@ -47,7 +53,7 @@ namespace ApiApplication.Database
             modelBuilder.Entity<TicketEntity>(build =>
             {
                 build.HasKey(entry => entry.Id);
-                build.Property(entry => entry.Id).ValueGeneratedOnAdd();
+                build.Property(entry => entry.Id); 
             });
         }
     }

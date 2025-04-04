@@ -14,6 +14,7 @@ namespace ApiApplication.Database
             var context = serviceScope.ServiceProvider.GetService<CinemaContext>();
             context.Database.EnsureCreated();
 
+                //added check for SQL DATABASES
             if (!context.Auditoriums.Any()) { 
                 context.Auditoriums.Add(new AuditoriumEntity
                 {

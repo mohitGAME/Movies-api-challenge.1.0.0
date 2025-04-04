@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using ApiApplication.Database.Entities;
 using ApiApplication.Database.Repositories.Abstractions;
+using ApiApplication.DTOs;
 using ApiApplication.Services;
 using Microsoft.AspNetCore.Mvc;
 using ProtoDefinitions;
@@ -53,12 +54,6 @@ public class ShowtimesController : ControllerBase
         var stopwatch = Stopwatch.StartNew();
         try
         {
-
-            await _cacheService.SetAsync("test", "rocket");
-
-
-            //var ss = await _cacheService.GetAsync<string>("test");
-
             //Get movie data from provided API with caching
             var movieData = await _cacheService.GetOrSetAsync(
             $"movie_{request.MovieName}",
@@ -80,7 +75,7 @@ public class ShowtimesController : ControllerBase
                     ImdbId = movieData.Id,
                     // Obv: Movie api does not have release date, add  
                     ReleaseDate = new DateTime(int.Parse(movieData.Year), 1, 1),
-                    Stars = movieData.ImDbRating,
+                    Stars = movieData.Crew,
                     Title = movieData.Title,
 
                 },
@@ -100,97 +95,89 @@ public class ShowtimesController : ControllerBase
         }
     }
 
-    //[HttpPost("{showtimeId}/reserve")]
-    //public async Task<IActionResult> ReserveSeats(int showtimeId, [FromBody] ReserveSeatsRequest request)
-    //{
-    //    var stopwatch = Stopwatch.StartNew();
-    //    try
-    //    {
-    //        // Validate showtime exists
-    //        var showtime = await _showtimesRepository.GetShowtimeAsync(showtimeId, CancellationToken.None);
-    //        if (showtime == null)
-    //            return NotFound("Showtime not found");
-
-    //        // Validate seats are contiguous
-    //        if (!AreSeatsContiguous(request.SeatNumbers))
-    //            return BadRequest("Seats must be contiguous");
-
-    //        // Check if seats are available
-    //        var availableSeats = await _ticketsRepository.GetAvailableSeatsAsync(showtimeId, CancellationToken.None);
-    //        if (!request.SeatNumbers.All(seat => availableSeats.Contains(seat)))
-    //            return BadRequest("One or more seats are not available");
-
-    //        // Create reservation
-    //        var reservation = await _ticketsRepository.CreateReservationAsync(
-    //            showtimeId,
-    //            request.SeatNumbers,
-    //            TimeSpan.FromMinutes(10),CancellationToken.None);
-
-    //        stopwatch.Stop();
-    //        _logger.LogInformation($"ReserveSeats took {stopwatch.ElapsedMilliseconds}ms");
-    //        return Ok(reservation);
-    //    }
-    //    catch (Exception ex)
-    //    {
-    //        _logger.LogError(ex, "Error reserving seats");
-    //        return StatusCode(500, "An error occurred while reserving seats");
-    //    }
-    //}
-
-    //[HttpPost("reservations/{reservationId}/confirm")]
-    //public async Task<IActionResult> ConfirmReservation(Guid reservationId)
-    //{
-    //    var stopwatch = Stopwatch.StartNew();
-    //    try
-    //    {
-    //        var reservation = await _ticketsRepository.GetReservationAsync(reservationId, CancellationToken.None);
-    //        if (reservation == null)
-    //            return NotFound("Reservation not found");
-
-    //        if (reservation.IsExpired)
-    //            return BadRequest("Reservation has expired");
-
-    //        var ticket = await _ticketsRepository.ConfirmReservationAsync(reservationId, CancellationToken.None);
-
-    //        stopwatch.Stop();
-    //        _logger.LogInformation($"ConfirmReservation took {stopwatch.ElapsedMilliseconds}ms");
-    //        return Ok(ticket);
-    //    }
-    //    catch (Exception ex)
-    //    {
-    //        _logger.LogError(ex, "Error confirming reservation");
-    //        return StatusCode(500, "An error occurred while confirming the reservation");
-    //    }
-    //}
-
-    private bool AreSeatsContiguous(IEnumerable<int> seatNumbers)
+    [HttpPost("{showtimeId}/reserve")]
+    public async Task<IActionResult> ReserveSeats(int showtimeId, [FromBody] ReserveSeatsRequest request)
     {
-        var sortedSeats = seatNumbers.OrderBy(x => x).ToList();
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            // Validate seats are contiguous
+            if (!AreSeatsContiguous(request.Seats))
+                return BadRequest("Seats must be contiguous");
+
+            // Check if seats are available // handled below : if passed seat does not exist
+            var availableSeats = await _ticketsRepository.GetAvailableSeatsAsync(showtimeId, CancellationToken.None);
+            if (!request.Seats.All(seat => availableSeats.Any(a => a.Row == seat.Row && a.SeatNumber == seat.SeatNumber)))
+                return BadRequest("One or more seats are not available");
+
+            // Create reservation
+            var reservation = await _ticketsRepository.CreateReservationAsync(
+                showtimeId,
+                request.Seats,
+                TimeSpan.FromMinutes(10), CancellationToken.None);
+
+
+            var reservationResponse = new ReservationResponse()
+            {
+                Guid = reservation.Id,
+                AuditoriumId = reservation.Showtime.AuditoriumId,
+                Seats = reservation.Seats.Select(x => new Seat { Row = x.Row, SeatNumber = x.SeatNumber }).ToList(),
+                Movie = reservation.Showtime.Movie.Title,
+            };
+
+            stopwatch.Stop();
+            _logger.LogInformation($"ReserveSeats took {stopwatch.ElapsedMilliseconds}ms");
+            return Ok(reservationResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reserving seats");
+            return StatusCode(500, "An error occurred while reserving seats");
+        }
+    }
+
+    [HttpPost("reservations/{reservationId}/confirm")]
+    public async Task<IActionResult> ConfirmReservation(Guid reservationId)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var ticket = await _ticketsRepository.ConfirmReservationAsync(reservationId, CancellationToken.None);
+
+            stopwatch.Stop();
+            _logger.LogInformation($"ConfirmReservation took {stopwatch.ElapsedMilliseconds}ms");
+            return Ok(ticket);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error confirming reservation");
+            return StatusCode(500, "An error occurred while confirming the reservation");
+        }
+    }
+    private bool AreSeatsContiguous(IEnumerable<Seat> seatNumbers)
+    {
+        var sortedSeats = seatNumbers.OrderBy(x => x.Row).ThenBy(x => x.SeatNumber).ToList();
         for (int i = 1; i < sortedSeats.Count; i++)
         {
-            if (sortedSeats[i] != sortedSeats[i - 1] + 1)
+            if (sortedSeats[i].Row == sortedSeats[i - 1].Row)
+            {
+                if (sortedSeats[i].SeatNumber != sortedSeats[i - 1].SeatNumber + 1)
+                    return false;
+            }
+            else
+            {
                 return false;
+            }
         }
         return true;
     }
-}
 
-public class CreateShowtimeRequest
-{
-    public string MovieName { get; set; }
+    //private int GetLastSeatNumberInRow(int row)
+    //{
+    //    // This method should return the last seat number in the given row.
+    //    // You need to implement this method based on your auditorium's seating arrangement.
+    //    // For example, if each row has 10 seats, you can return 10.
 
-    public int AuditoriumId { get; set; }
-    public DateTime StartTime { get; set; }
-}
-
-public class ReserveSeatsRequest
-{
-    public List<int> SeatNumbers { get; set; }
-}
-
-public class MovieData
-{
-    public string Id { get; set; }
-    public string Title { get; set; }
-    // Add other required fields
+    //    return 10; // Example value, replace with actual logic.
+    //}
 }

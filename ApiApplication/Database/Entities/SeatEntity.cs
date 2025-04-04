@@ -6,5 +6,8 @@
         public short SeatNumber { get; set; }
         public int AuditoriumId { get; set; }
         public AuditoriumEntity Auditorium { get; set; }
+
+        public Guid? TicketEntityId { get; set; }
+        public TicketEntity? Ticket { get; set; }
     }
 }
