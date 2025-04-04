@@ -62,38 +62,21 @@ namespace ApiApplication.Database.Repositories
             // Process expired tickets
             var tenMinutesAgo = DateTime.UtcNow.AddMinutes(-10);
             var expiredTicketsQuery = _context.Tickets
-                .Include(x => x.Seats)
                 .Where(t => t.ShowtimeId == showtimeId && !t.Paid && t.CreatedTime <= tenMinutesAgo);
 
             var expiredTickets = await expiredTicketsQuery.ToListAsync(cancel);
-            if (expiredTickets.Any())
+            if (expiredTickets.Count != 0)
             {
                 _context.Tickets.RemoveRange(expiredTickets);
                 await _context.SaveChangesAsync(cancel);
             }
 
-            // Get all seats from auditorium and reserved seats in parallel
-            var auditoriumTask = _context.Auditoriums
-                .Include(x => x.Seats)
-                .FirstOrDefaultAsync(a => a.Id == auditoriumId, cancel);
-
-            var reservedSeatsTask = _context.Tickets
-                .Where(t => t.ShowtimeId == showtimeId)
-                .SelectMany(t => t.Seats)
+            var newAvailableSeats = await _context.Seats
+                .Where(x => x.AuditoriumId == auditoriumId && x.TicketEntityId == null)
                 .Select(s => new Seat { SeatNumber = s.SeatNumber, Row = s.Row })
                 .ToListAsync(cancel);
 
-            await Task.WhenAll(auditoriumTask, reservedSeatsTask);
-
-            var auditorium = auditoriumTask.Result;
-            if (auditorium == null)
-                throw new ArgumentException("Auditorium not found");
-
-            // Calculate available seats
-            var totalSeats = auditorium.Seats.Select(s => new Seat { SeatNumber = s.SeatNumber, Row = s.Row });
-            var reservedSeats = reservedSeatsTask.Result;
-
-            return totalSeats.Except(reservedSeats, new SeatComparer());
+            return newAvailableSeats;
         }
 
         private class SeatComparer : IEqualityComparer<Seat>

@@ -143,10 +143,16 @@ public class ShowtimesController : ControllerBase
         try
         {
             var ticket = await _ticketsRepository.ConfirmReservationAsync(reservationId, CancellationToken.None);
-
+            var buySeatsResponse = new BuySeatsResponseDto()
+            {
+                Message = "Booking Confirmed",
+                PurchasedSeats = [.. ticket.Seats.Select(s => new Seat { SeatNumber = s.SeatNumber, Row = s.Row })],
+                ReservationId = ticket.Id,
+                PurchaseTime = DateTime.UtcNow,
+            };
             stopwatch.Stop();
             _logger.LogInformation($"ConfirmReservation took {stopwatch.ElapsedMilliseconds}ms");
-            return Ok(ticket);
+            return Ok(buySeatsResponse);
         }
         catch (Exception ex)
         {
@@ -170,6 +176,14 @@ public class ShowtimesController : ControllerBase
             }
         }
         return true;
+    }
+
+    public class BuySeatsResponseDto
+    {
+        public Guid ReservationId { get; set; }
+        public string Message { get; set; }
+        public DateTime PurchaseTime { get; set; }
+        public List<Seat> PurchasedSeats { get; set; }
     }
 
     //private int GetLastSeatNumberInRow(int row)

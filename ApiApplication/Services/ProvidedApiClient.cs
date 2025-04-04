@@ -1,5 +1,7 @@
+using System.Text.Json;
 using ApiApplication.Controllers;
 using ApiApplication.Database.Entities;
+using Google.Protobuf;
 using Grpc.Core;
 using Grpc.Net.Client;
 using ProtoDefinitions;
@@ -50,7 +52,7 @@ public class ProvidedApiClient : IProvidedApiClient
             }
 
             var grpcHttpClient = new HttpClient(handler);
-            grpcHttpClient.DefaultRequestHeaders.Add("X-Apikey", apiKey); 
+            grpcHttpClient.DefaultRequestHeaders.Add("X-Apikey", apiKey);
 
             _grpcChannel = GrpcChannel.ForAddress(grpcAddress, new GrpcChannelOptions
             {
@@ -83,8 +85,11 @@ public class ProvidedApiClient : IProvidedApiClient
         try
         {
 
+            if (_useGrpc)
+                return await GetMovieViaGrpc(movieName);
 
-            return await GetMovieViaGrpc(movieName);
+            return await GetMovieViaHttp(movieName);
+
         }
         catch (Exception ex)
         {
@@ -95,8 +100,6 @@ public class ProvidedApiClient : IProvidedApiClient
 
     private async Task<showResponse> GetMovieViaGrpc(string movieName)
     {
-        //var request = new MovieRequest { Id = movieId };
-
         try
         {
             var response = await _moviesApiClient.SearchAsync(new SearchRequest() { Text = movieName });
@@ -110,10 +113,38 @@ public class ProvidedApiClient : IProvidedApiClient
         }
     }
 
-    //private async Task<MovieEntity> GetMovieViaHttp(string movieId)
-    //{
-    //    var response = await _httpClient.GetAsync($"/api/movies/{movieId}");
-    //    response.EnsureSuccessStatusCode();
-    //    return await response.Content.ReadFromJsonAsync<MovieEntity>();
-    //}
+
+    private async Task<showResponse> GetMovieViaHttp(string movieName)
+    {
+        var response = await _httpClient.GetAsync($"/v1/movies/?search={movieName}");
+        response.EnsureSuccessStatusCode();
+
+        var responseContent = await response.Content.ReadAsStringAsync();
+
+        // Determine if the response is an array or an object
+        string wrappedJson;
+        var jsonRoot = JsonDocument.Parse(responseContent).RootElement;
+
+        if (jsonRoot.ValueKind == JsonValueKind.Array)
+        {
+            // API returned a raw array, wrap it
+            wrappedJson = $"{{ \"shows\": {responseContent} }}";
+        }
+        else
+        {
+            // Already an object
+            wrappedJson = responseContent;
+        }
+
+        // Parse using Google.Protobuf.JsonParser
+        var parser = new JsonParser(JsonParser.Settings.Default.WithIgnoreUnknownFields(true));
+        var showListResponse = parser.Parse<showListResponse>(wrappedJson);
+
+        if (showListResponse == null || showListResponse.Shows.Count == 0)
+        {
+            throw new Exception("No shows found in response.");
+        }
+
+        return showListResponse.Shows.First();
+    }
 }
