@@ -6,7 +6,7 @@ Provided API:
 1. Movie Search is not searching by complete title, but by partial title. 
      For example, searching for "The mock movie" returns a 500 status code, but searching with "mock" returns a record.
 2. It should have a release date property in the response, currently it has only the YEAR.
-3. It should have a movie length property in the response. That could be used to calculate the showtime.
+3. It should have a movie length property in the response. That could be used to calculate the showtime.By this,We can add validation for auditorium availability by checking for overlapping showtimes.
 
 
 Requirements:    
