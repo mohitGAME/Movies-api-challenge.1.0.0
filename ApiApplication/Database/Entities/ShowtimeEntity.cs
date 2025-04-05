@@ -6,7 +6,6 @@
         public MovieEntity Movie { get; set; }
         public DateTime SessionDate { get; set; }
         public int AuditoriumId { get; set; }
-        public AuditoriumEntity Auditorium { get; set; }
         public ICollection<TicketEntity> Tickets { get; set; }
     }
 }

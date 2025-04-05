@@ -2,6 +2,7 @@ using System.Diagnostics;
 using ApiApplication.Database.Entities;
 using ApiApplication.Database.Repositories.Abstractions;
 using ApiApplication.DTOs;
+using ApiApplication.DTOs.Common;
 using ApiApplication.Services;
 using Microsoft.AspNetCore.Mvc;
 using ProtoDefinitions;
@@ -44,12 +45,14 @@ public class ShowtimesController : ControllerBase
 
 
         var dds = await _providedApiClient.GetMovieAsync(dd.Shows.FirstOrDefault().FullTitle);
+
+        Results.Problem("Error", statusCode: 500, title: "Error", type: "https://example.com/error");
         return dd;
     }
 
 
     [HttpPost]
-    public async Task<IActionResult> CreateShowtime([FromBody] CreateShowtimeRequest request)
+    public async Task<ActionResult<ApiResponse<string>>> CreateShowtime([FromBody] CreateShowtimeRequest request)
     {
         var stopwatch = Stopwatch.StartNew();
         try
@@ -95,24 +98,16 @@ public class ShowtimesController : ControllerBase
         }
     }
 
-    [HttpPost("{showtimeId}/reserve")]
-    public async Task<IActionResult> ReserveSeats(int showtimeId, [FromBody] ReserveSeatsRequest request)
+    [HttpPost("reserve")]
+    public async Task<ActionResult<ApiResponse<ReservationResponse>>> ReserveSeats([FromBody] ReserveSeatsRequest request)
     {
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            // Validate seats are contiguous
-            if (!AreSeatsContiguous(request.Seats))
-                return BadRequest("Seats must be contiguous");
-
-            // Check if seats are available // handled below : if passed seat does not exist
-            var availableSeats = await _ticketsRepository.GetAvailableSeatsAsync(showtimeId, CancellationToken.None);
-            if (!request.Seats.All(seat => availableSeats.Any(a => a.Row == seat.Row && a.SeatNumber == seat.SeatNumber)))
-                return BadRequest("One or more seats are not available");
 
             // Create reservation
             var reservation = await _ticketsRepository.CreateReservationAsync(
-                showtimeId,
+                request.ShowtimeId,
                 request.Seats,
                 TimeSpan.FromMinutes(10), CancellationToken.None);
 
@@ -127,7 +122,7 @@ public class ShowtimesController : ControllerBase
 
             stopwatch.Stop();
             _logger.LogInformation($"ReserveSeats took {stopwatch.ElapsedMilliseconds}ms");
-            return Ok(reservationResponse);
+            return Ok(ApiResponse<ReservationResponse>.SuccessResponse(reservationResponse, "Seats reserved successfully"));
         }
         catch (Exception ex)
         {
@@ -137,7 +132,7 @@ public class ShowtimesController : ControllerBase
     }
 
     [HttpPost("reservations/{reservationId}/confirm")]
-    public async Task<IActionResult> ConfirmReservation(Guid reservationId)
+    public async Task<ActionResult<ApiResponse<BuySeatsResponseDto>>> ConfirmReservation(Guid reservationId)
     {
         var stopwatch = Stopwatch.StartNew();
         try
@@ -160,24 +155,10 @@ public class ShowtimesController : ControllerBase
             return StatusCode(500, "An error occurred while confirming the reservation");
         }
     }
-    private bool AreSeatsContiguous(IEnumerable<Seat> seatNumbers)
-    {
-        var sortedSeats = seatNumbers.OrderBy(x => x.Row).ThenBy(x => x.SeatNumber).ToList();
-        for (int i = 1; i < sortedSeats.Count; i++)
-        {
-            if (sortedSeats[i].Row == sortedSeats[i - 1].Row)
-            {
-                if (sortedSeats[i].SeatNumber != sortedSeats[i - 1].SeatNumber + 1)
-                    return false;
-            }
-            else
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
+    
+    
+ 
+    
     public class BuySeatsResponseDto
     {
         public Guid ReservationId { get; set; }
