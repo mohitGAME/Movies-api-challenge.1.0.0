@@ -4,6 +4,7 @@ using ApiApplication.Database.Repositories.Abstractions;
 using ApiApplication.DTOs;
 using ApiApplication.DTOs.Common;
 using ApiApplication.Services;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using ProtoDefinitions;
 
@@ -19,6 +20,7 @@ public class ShowtimesController : ControllerBase
     private readonly ICacheService _cacheService;
     private readonly IProvidedApiClient _providedApiClient;
     private readonly ILogger<ShowtimesController> _logger;
+    private readonly IValidator<CreateShowtimeRequest> _validator;
 
     public ShowtimesController(
         IShowtimesRepository showtimesRepository,
@@ -26,7 +28,8 @@ public class ShowtimesController : ControllerBase
         IAuditoriumsRepository auditoriumsRepository,
         ICacheService cacheService,
         IProvidedApiClient providedApiClient,
-        ILogger<ShowtimesController> logger)
+        ILogger<ShowtimesController> logger,
+        IValidator<CreateShowtimeRequest> validator)
     {
         _showtimesRepository = showtimesRepository;
         _ticketsRepository = ticketsRepository;
@@ -34,21 +37,22 @@ public class ShowtimesController : ControllerBase
         _cacheService = cacheService;
         _providedApiClient = providedApiClient;
         _logger = logger;
+        _validator = validator;
     }
 
-    [HttpGet]
-    public async Task<showListResponse> GetTest()
-    {
+    //[HttpGet]
+    //public async Task<showListResponse> GetTest()
+    //{
 
-        var grpc = new ApiClientGrpc();
-        var dd = await grpc.GetAll();
+    //    var grpc = new ApiClientGrpc();
+    //    var dd = await grpc.GetAll();
 
 
-        var dds = await _providedApiClient.GetMovieAsync(dd.Shows.FirstOrDefault().FullTitle);
+    //    var dds = await _providedApiClient.GetMovieAsync(dd.Shows.FirstOrDefault().FullTitle);
 
-        Results.Problem("Error", statusCode: 500, title: "Error", type: "https://example.com/error");
-        return dd;
-    }
+    //    Results.Problem("Error", statusCode: 500, title: "Error", type: "https://example.com/error");
+    //    return dd;
+    //}
 
 
     [HttpPost]
@@ -57,36 +61,28 @@ public class ShowtimesController : ControllerBase
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            //Get movie data from provided API with caching
-            var movieData = await _cacheService.GetOrSetAsync(
-            $"movie_{request.MovieName}",
-            async () =>
+            var validationContext = new ValidationContext<CreateShowtimeRequest>(request);
+            var validationResult = await _validator.ValidateAsync(validationContext);
+
+            if (validationResult.IsValid)
             {
-                var movie = await _providedApiClient.GetMovieAsync(request.MovieName);
-                if (movie == null)
+                var movieData = validationContext.RootContextData["MovieData"] as showResponse;
+                var show = new ShowtimeEntity()
                 {
-                    throw new Exception("Movie data is null");
-                }
-                return movie;
-            },
-            TimeSpan.FromHours(1));
-            var show = new ShowtimeEntity()
-            {
-                AuditoriumId = request.AuditoriumId,
-                Movie = new MovieEntity()
-                {
-                    ImdbId = movieData.Id,
-                    // Obv: Movie api does not have release date, add  
-                    ReleaseDate = new DateTime(int.Parse(movieData.Year), 1, 1),
-                    Stars = movieData.Crew,
-                    Title = movieData.Title,
+                    AuditoriumId = request.AuditoriumId,
+                    Movie = new MovieEntity()
+                    {
+                        ImdbId = movieData.Id,
+                        // Obv: Movie api does not have release date, add  
+                        ReleaseDate = new DateTime(int.Parse(movieData.Year), 1, 1),
+                        Stars = movieData.Crew,
+                        Title = movieData.Title,
 
-                },
-                SessionDate = request.StartTime,
-            };
-            var showtime = await _showtimesRepository.CreateShowtime(show, CancellationToken.None);
-
-
+                    },
+                    SessionDate = request.StartTime,
+                };
+                var showtime = await _showtimesRepository.CreateShowtime(show, CancellationToken.None);
+            }
             stopwatch.Stop();
             _logger.LogInformation($"CreateShowtime took {stopwatch.ElapsedMilliseconds}ms");
             return Ok("showtime");
@@ -116,7 +112,7 @@ public class ShowtimesController : ControllerBase
             {
                 Guid = reservation.Id,
                 AuditoriumId = reservation.Showtime.AuditoriumId,
-                Seats = reservation.Seats.Select(x => new Seat { Row = x.Row, SeatNumber = x.SeatNumber }).ToList(),
+                Seats = [.. reservation.Seats.Select(x => new Seat { Row = x.Row, SeatNumber = x.SeatNumber })],
                 Movie = reservation.Showtime.Movie.Title,
             };
 
@@ -155,10 +151,7 @@ public class ShowtimesController : ControllerBase
             return StatusCode(500, "An error occurred while confirming the reservation");
         }
     }
-    
-    
- 
-    
+
     public class BuySeatsResponseDto
     {
         public Guid ReservationId { get; set; }

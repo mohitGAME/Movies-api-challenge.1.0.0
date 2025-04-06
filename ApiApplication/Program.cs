@@ -1,7 +1,10 @@
 using ApiApplication.Database;
 using ApiApplication.Database.Repositories;
 using ApiApplication.Database.Repositories.Abstractions;
+using ApiApplication.DTOs;
 using ApiApplication.Services;
+using ApiApplication.Validators;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.OpenApi.Models;
@@ -80,6 +83,9 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 });
 
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+builder.Services.AddScoped<IValidator<CreateShowtimeRequest>, CreateShowtimeValidator>();
+
+
 
 var app = builder.Build();
 
