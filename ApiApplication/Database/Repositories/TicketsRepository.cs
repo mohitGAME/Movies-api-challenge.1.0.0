@@ -42,41 +42,26 @@ namespace ApiApplication.Database.Repositories
         }
         public async Task<IEnumerable<Seat>> GetAvailableSeatsAsync(int showtimeId, CancellationToken cancel)
         {
-            // Get showtime and auditorium in parallel
-            var showtimeTask = _context.Showtimes
-                .FirstOrDefaultAsync(x => x.Id == showtimeId, cancel);
-
-            var showtimeAuditoriumIdTask = _context.Showtimes
-                .Where(x => x.Id == showtimeId)
-                .Select(x => x.AuditoriumId)
-                .FirstOrDefaultAsync(cancel);
-
-            await Task.WhenAll(showtimeTask, showtimeAuditoriumIdTask);
-
-            var showtime = showtimeTask.Result;
-            if (showtime == null)
-                throw new ArgumentException("Showtime not found");
-
-            var auditoriumId = showtimeAuditoriumIdTask.Result;
-
-            // Process expired tickets
             var tenMinutesAgo = DateTime.UtcNow.AddMinutes(-10);
-            var expiredTicketsQuery = _context.Tickets
-                .Where(t => t.ShowtimeId == showtimeId && !t.Paid && t.CreatedTime <= tenMinutesAgo);
 
-            var expiredTickets = await expiredTicketsQuery.ToListAsync(cancel);
-            if (expiredTickets.Count != 0)
-            {
-                _context.Tickets.RemoveRange(expiredTickets);
-                await _context.SaveChangesAsync(cancel);
-            }
+            await _context.Tickets
+                .Where(t => t.ShowtimeId == showtimeId && !t.Paid && t.CreatedTime <= tenMinutesAgo)
+                .ExecuteDeleteAsync(cancel);
 
-            var newAvailableSeats = await _context.Seats
-                .Where(x => x.AuditoriumId == auditoriumId && x.TicketEntityId == null)
-                .Select(s => new Seat { SeatNumber = s.SeatNumber, Row = s.Row })
+            return await _context.Seats
+                .Join(
+                    _context.Showtimes.Where(s => s.Id == showtimeId),
+                    seat => seat.AuditoriumId,
+                    showtime => showtime.AuditoriumId,
+                    (seat, showtime) => seat
+                )
+                .Where(seat => seat.TicketEntityId == null)
+                .Select(seat => new Seat
+                {
+                    SeatNumber = seat.SeatNumber,
+                    Row = seat.Row
+                })
                 .ToListAsync(cancel);
-
-            return newAvailableSeats;
         }
 
         private class SeatComparer : IEqualityComparer<Seat>

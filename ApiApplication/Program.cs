@@ -84,6 +84,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 builder.Services.AddScoped<IValidator<CreateShowtimeRequest>, CreateShowtimeValidator>();
+builder.Services.AddScoped<IValidator<ReserveSeatsRequest>, ReserveSeatsValidator>();
 
 
 
